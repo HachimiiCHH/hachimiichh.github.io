@@ -167,6 +167,45 @@ function createAnnotation(text, x, y) {
     objectLayer.batchDraw();
 }
 
+function showFloatingTextInput(clientX, clientY, stagePos) {
+    // create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '輸入註解並按 Enter 確認';
+    input.style.position = 'absolute';
+    input.style.left = clientX + 'px';
+    input.style.top = clientY + 'px';
+    input.style.zIndex = 2000;
+    input.style.padding = '6px 8px';
+    input.style.borderRadius = '4px';
+    input.style.border = '1px solid rgba(0,0,0,0.4)';
+    input.style.background = 'rgba(255,255,255,0.95)';
+    input.style.minWidth = '120px';
+    document.body.appendChild(input);
+    input.focus();
+
+    function cleanup(commit) {
+        const val = input.value;
+        input.remove();
+        if (commit && val && val.trim()) {
+            createAnnotation(val.trim(), stagePos.x, stagePos.y);
+        }
+        window.removeEventListener('mousedown', onOutsideClick);
+    }
+
+    function onKey(e) {
+        if (e.key === 'Enter') { cleanup(true); }
+        else if (e.key === 'Escape') { cleanup(false); }
+    }
+
+    function onOutsideClick(ev) {
+        if (ev.target !== input) { cleanup(true); }
+    }
+
+    input.addEventListener('keydown', onKey);
+    setTimeout(() => window.addEventListener('mousedown', onOutsideClick));
+}
+
 function createTerrainShape(shapeType) {
     let shape;
     const commonSettings = {
@@ -226,7 +265,8 @@ let tempShape = null;
 let pointsLine = [];
 
 stage.on('mousedown touchstart', function (e) {
-    if (currentMode === 'move') return;
+    // don't start freehand drawing when in move or text mode
+    if (currentMode === 'move' || currentMode === 'text') return;
     if (e.evt.button === 2) return; 
 
     isDrawing = true;
@@ -462,15 +502,18 @@ stage.on('wheel', (e) => {
 
 stage.on('click tap', function (e) {
     const pos = stage.getRelativePointerPosition();
+    // text mode: show floating input, do this before spawnMode
+    if (currentMode === 'text' && (e.target === stage || e.target === konvaMapImage)) {
+        const clientX = e.evt.clientX;
+        const clientY = e.evt.clientY;
+        showFloatingTextInput(clientX, clientY, pos);
+        return;
+    }
+    // spawn mode: allow placing teams on click
     if (spawnMode && (e.target === stage || e.target === konvaMapImage)) {
         if (spawnMode === 'team-a') createTeamNode('#ff4d4d', 'A', pos.x, pos.y);
         else if (spawnMode === 'team-b') createTeamNode('#3399ff', 'B', pos.x, pos.y);
         else if (spawnMode === 'team-c') createTeamNode('#ffcc00', 'C', pos.x, pos.y);
-        return;
-    }
-    if (currentMode === 'text' && (e.target === stage || e.target === konvaMapImage)) {
-        const text = prompt('請輸入註解文字：');
-        if (text && text.trim()) createAnnotation(text.trim(), pos.x, pos.y);
         return;
     }
     if (currentMode !== 'move') return;
