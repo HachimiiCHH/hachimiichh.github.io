@@ -1,6 +1,6 @@
 // ========================================================
 // Hachimii - FF14 Front Line Tactics
-// Version: v0.3.2 (Map Lock & Overlapping Team Markers & Object Layer Z-Index Edition)
+// Version: v0.3.5 (Tactics Code Base64 LZW Compression Edition)
 // Engine: Konva.js (Multi-Layer Architecture)
 // ========================================================
 
@@ -33,27 +33,29 @@ function loadMap(url) {
     mapImageObj.onload = function() {
         if (konvaMapImage) konvaMapImage.destroy();
         const imageRatio = mapImageObj.width / mapImageObj.height;
-        const stageRatio = stage.width() / stage.height();
-        let imgWidth = mapImageObj.width;
-        let imgHeight = mapImageObj.height;
+        
+        // Use a fixed base width for the map coordinate system to ensure cross-screen alignment!
+        const baseWidth = 1200;
+        const baseHeight = baseWidth / imageRatio;
 
-        if (imageRatio > stageRatio) {
-            imgWidth = stage.width();
-            imgHeight = stage.width() / imageRatio;
-        } else {
-            imgHeight = stage.height();
-            imgWidth = stage.height() * imageRatio;
-        }
-
-        const xPos = (stage.width() - imgWidth) / 2;
-        const yPos = (stage.height() - imgHeight) / 2;
         konvaMapImage = new Konva.Image({
-            x: xPos, y: yPos, image: mapImageObj,
-            width: imgWidth, height: imgHeight,
+            x: 0, y: 0, image: mapImageObj,
+            width: baseWidth, height: baseHeight,
             listening: false 
         });
         mapLayer.add(konvaMapImage);
+        
+        // Auto-center only if the stage scale/position has not been customized/imported
+        if (stage.scaleX() === 1 && stage.x() === 0 && stage.y() === 0) {
+            const scale = Math.min(stage.width() / baseWidth, stage.height() / baseHeight);
+            stage.scale({ x: scale, y: scale });
+            const xPos = (stage.width() - baseWidth * scale) / 2;
+            const yPos = (stage.height() - baseHeight * scale) / 2;
+            stage.position({ x: xPos, y: yPos });
+        }
+        
         mapLayer.batchDraw();
+        stage.batchDraw();
     };
     mapImageObj.src = url;
 }
@@ -72,6 +74,10 @@ document.getElementById('map-select').addEventListener('change', (e) => {
     // Redraw layers
     objectLayer.batchDraw();
     drawLayer.batchDraw();
+    
+    // Reset stage scale and position so the new map can auto-center correctly
+    stage.scale({ x: 1, y: 1 });
+    stage.position({ x: 0, y: 0 });
     
     // Load new map image
     loadMap(e.target.value);
@@ -174,6 +180,7 @@ function createTeamNode(color, teamName, x, y) {
     updateDraggableState();
     
     objectLayer.batchDraw();
+    return group;
 }
 
 function clearTeamsByName(teamName) {
@@ -259,7 +266,8 @@ function createTerrainShape(shapeType) {
     const commonSettings = {
         x: stage.width() / 2 - stage.x(), y: stage.height() / 2 - stage.y(),
         fill: 'transparent', stroke: '#000000', strokeWidth: 4,
-        draggable: true, customType: 'terrain-shape', name: 'terrain'
+        draggable: true, customType: 'terrain-shape', name: 'terrain',
+        shapeType: shapeType
     };
 
     if (shapeType === 'rect') {
@@ -287,7 +295,7 @@ function createTerrainShape(shapeType) {
     switchToMoveMode();
 }
 
-function createObjectSprite(objectIndex, x, y) {
+function createObjectSprite(objectIndex, x, y, capturedTeam = '0') {
     let imagePath = '';
     let size = 60;
     if (objectIndex < 3) {
@@ -297,13 +305,13 @@ function createObjectSprite(objectIndex, x, y) {
         imagePath = `object/ice-small-${objectIndex - 3}.png`;
         size = 40;
     } else if (objectIndex === 6) {
-        imagePath = 'object/score-B-0.png';
+        imagePath = `object/score-B-${capturedTeam}.png`;
         size = 50; // 40 * 1.25 = 50
     } else if (objectIndex === 7) {
-        imagePath = 'object/score-A-0.png';
+        imagePath = `object/score-A-${capturedTeam}.png`;
         size = 62; // 50 * 1.25 = 62.5 -> round to 62
     } else if (objectIndex === 8) {
-        imagePath = 'object/score-S-0.png';
+        imagePath = `object/score-S-${capturedTeam}.png`;
         size = 75; // 60 * 1.25 = 75
     }
     
@@ -319,7 +327,8 @@ function createObjectSprite(objectIndex, x, y) {
             height: size,
             draggable: true,
             customType: 'object-sprite',
-            objectType: objectIndex
+            objectType: objectIndex,
+            capturedTeam: capturedTeam
         });
         
         objectLayer.add(konvaImage);
@@ -355,6 +364,7 @@ contextMenu.addEventListener('click', function(e) {
         newImg.crossOrigin = 'Anonymous';
         newImg.onload = function() {
             rightClickedObject.image(newImg);
+            rightClickedObject.setAttr('capturedTeam', teamCode); // Store the captured team state!
             objectLayer.batchDraw();
         };
         newImg.src = `object/score-${rankCode}-${teamCode}.png`;
@@ -431,7 +441,8 @@ teamMarkerMenu.addEventListener('click', function(e) {
                 width: finalWidth,
                 height: finalHeight,
                 name: 'team-marker',
-                customType: 'team-head-marker'
+                customType: 'team-head-marker',
+                markerIndex: markerIndex
             });
             
             rightClickedObject.add(konvaImage);
@@ -987,3 +998,385 @@ if (lockMapCheckbox) {
     lockMapCheckbox.addEventListener('change', updateStageDraggableState);
 }
 updateStageDraggableState(); // run once on initialization
+
+// ==========================================
+// 10. 戰術代碼匯出與匯入功能 (JSON 序列化 & LZ-String 壓縮)
+// ==========================================
+
+// Helper mapping for map URLs to IDs and vice versa
+const MAP_URL_MAPPING = {
+    'map/M1.png': 1,
+    'map/M2.jpg': 2,
+    'map/M3.png': 3
+};
+const MAP_ID_MAPPING = {
+    1: 'map/M1.png',
+    2: 'map/M2.jpg',
+    3: 'map/M3.png'
+};
+
+function exportTacticsJSON() {
+    const mapUrl = document.getElementById('map-select').value;
+    const mapId = MAP_URL_MAPPING[mapUrl] || mapUrl; 
+    const isLocked = document.getElementById('lock-map') ? (document.getElementById('lock-map').checked ? 1 : 0) : 0;
+    
+    const data = {
+        v: '0.3.6', 
+        m: mapId,   
+        l: isLocked, 
+        s: [
+            Math.round(stage.scaleX() * 1000) / 1000, 
+            Math.round(stage.x() * 10) / 10,          
+            Math.round(stage.y() * 10) / 10           
+        ],
+        o: [], 
+        l_arr: [] 
+    };
+
+    // Serialize objects in objectLayer to array formats for maximum size reduction!
+    objectLayer.getChildren().forEach(node => {
+        if (node === transformer) return;
+
+        const type = node.attrs.customType;
+        const posX = Math.round(node.x() * 10) / 10;
+        const posY = Math.round(node.y() * 10) / 10;
+
+        if (type === 'team-node') {
+            const headMarkerNode = node.findOne('.team-marker');
+            const headMarker = headMarkerNode ? headMarkerNode.attrs.markerIndex : null;
+            // Schema: [TypeID=0, x, y, team, teamColor, headMarker]
+            data.o.push([0, posX, posY, node.attrs.team, node.attrs.teamColor, headMarker]);
+        }
+        else if (type === 'annotation') {
+            const textNode = node.findOne('Text');
+            const text = textNode ? textNode.text() : '';
+            // Schema: [TypeID=1, x, y, text]
+            data.o.push([1, posX, posY, text]);
+        }
+        else if (type === 'object-sprite') {
+            // Schema: [TypeID=2, x, y, objectType, capturedTeam]
+            data.o.push([2, posX, posY, node.attrs.objectType, node.attrs.capturedTeam || '0']);
+        }
+        else if (type === 'marker-sprite') {
+            // Save center coordinates
+            const centerX = Math.round((node.x() + node.width() / 2) * 10) / 10;
+            const centerY = Math.round((node.y() + node.height() / 2) * 10) / 10;
+            // Schema: [TypeID=3, x, y, markerType]
+            data.o.push([3, centerX, centerY, node.attrs.markerType]);
+        }
+        else if (type === 'terrain-shape') {
+            // Schema: [TypeID=4, x, y, shapeType, width, height, scaleX, scaleY, rotation, fill, stroke, strokeWidth]
+            data.o.push([
+                4,
+                posX,
+                posY,
+                node.attrs.shapeType,
+                Math.round((node.width ? node.width() : 50) * 10) / 10,
+                Math.round((node.height ? node.height() : 50) * 10) / 10,
+                Math.round((node.scaleX() || 1) * 100) / 100,
+                Math.round((node.scaleY() || 1) * 100) / 100,
+                Math.round((node.rotation() || 0) * 10) / 10,
+                node.fill(),
+                node.stroke(),
+                node.strokeWidth()
+            ]);
+        }
+    });
+
+    // Serialize lines in drawLayer (integer points save tons of bytes!)
+    drawLayer.find('.drawn-line').forEach(node => {
+        const isArrow = (node instanceof Konva.Arrow) ? 1 : 0;
+        const roundedPoints = node.points().map(p => Math.round(p));
+        // Schema: [points, stroke, strokeWidth, customType, dash, isArrow]
+        data.l_arr.push([
+            roundedPoints,
+            node.stroke(),
+            node.strokeWidth(),
+            node.attrs.customType,
+            node.dash() || null,
+            isArrow
+        ]);
+    });
+
+    const verboseString = JSON.stringify(data);
+    
+    try {
+        // High-ratio LZW compression to Base64
+        const compressedCode = LZString.compressToBase64(verboseString);
+        
+        navigator.clipboard.writeText(compressedCode).then(() => {
+            alert("戰術代碼（壓縮後的極短金鑰）已成功複製到您的剪貼簿！\n您可以直接分享給隊友。");
+        }).catch(err => {
+            console.error("Failed to copy clipboard: ", err);
+            prompt("複製剪貼簿失敗，請手動複製下方壓縮代碼：", compressedCode);
+        });
+    } catch (e) {
+        console.error("Compression failed: ", e);
+        // Fallback: output plain string
+        navigator.clipboard.writeText(verboseString);
+        alert("壓縮失敗，已直接複製原始戰術代碼到您的剪貼簿。");
+    }
+}
+
+function importTacticsJSON() {
+    let code = prompt("請貼上分享的戰術代碼 (壓縮後的金鑰字串)：");
+    if (!code || !code.trim()) return;
+    code = code.trim();
+
+    let data;
+    try {
+        if (code.startsWith('{')) {
+            // Fallback for raw JSON string if user posted uncompressed code
+            data = JSON.parse(code);
+        } else {
+            const decompressed = LZString.decompressFromBase64(code);
+            if (!decompressed) {
+                throw new Error("Decompression returned null/empty string");
+            }
+            data = JSON.parse(decompressed);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("解析戰術代碼失敗！代碼可能損壞或不完整。");
+        return;
+    }
+
+    try {
+        const version = data.v || data.version;
+        const rawMap = data.m || data.mapUrl;
+        const mapUrl = MAP_ID_MAPPING[rawMap] || rawMap; 
+        const isLocked = (data.l !== undefined) ? (data.l === 1 || data.l === true) : !!data.lockMap;
+        const scaleVal = data.s ? (Array.isArray(data.s) ? data.s[0] : data.stage.scale) : (data.stage ? data.stage.scale : 1);
+        const stageX = data.s ? (Array.isArray(data.s) ? data.s[1] : data.stage.x) : (data.stage ? data.stage.x : 0);
+        const stageY = data.s ? (Array.isArray(data.s) ? data.s[2] : data.stage.y) : (data.stage ? data.stage.y : 0);
+        const objects = data.o || data.objects || [];
+        const lines = data.l_arr || data.lines || [];
+
+        if (!mapUrl || !scaleVal) {
+            alert("無效的戰術代碼格式！");
+            return;
+        }
+
+        // 1. Restore map selection & lock checkbox
+        if (document.getElementById('map-select').value !== mapUrl) {
+            document.getElementById('map-select').value = mapUrl;
+            loadMap(mapUrl);
+        }
+        
+        const lockMapCheckbox = document.getElementById('lock-map');
+        if (lockMapCheckbox) {
+            lockMapCheckbox.checked = isLocked;
+        }
+
+        // 2. Clear current board
+        transformer.nodes([]);
+        selectedNode = null;
+        objectLayer.getChildren().filter(node => node !== transformer).forEach(node => node.destroy());
+        drawLayer.destroyChildren();
+
+        // 3. Restore stage scale & position
+        stage.scale({ x: scaleVal, y: scaleVal });
+        stage.position({ x: stageX, y: stageY });
+        updateStageDraggableState();
+
+        // Helper to handle team node marker attachment asynchronously
+        function attachMarkerToTeamNode(teamNode, markerIndex) {
+            let imagePath = '';
+            let size = 28;
+            if (markerIndex < 5) imagePath = `marker/power_${markerIndex + 1}.png`;
+            else if (markerIndex >= 5 && markerIndex < 12) imagePath = `marker/p_icon_${markerIndex - 5}.png`;
+            else imagePath = `marker/mark_${markerIndex - 11}.png`;
+
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = function() {
+                let finalWidth = size;
+                let finalHeight = size;
+                const imgRatio = img.width / img.height;
+                if (imgRatio > 1) {
+                    finalWidth = size;
+                    finalHeight = size / imgRatio;
+                } else {
+                    finalHeight = size;
+                    finalWidth = size * imgRatio;
+                }
+                const oldMarker = teamNode.findOne('.team-marker');
+                if (oldMarker) oldMarker.destroy();
+
+                const konvaImage = new Konva.Image({
+                    image: img,
+                    x: -finalWidth / 2,
+                    y: -16 - finalHeight + 8, // 25% overlap
+                    width: finalWidth,
+                    height: finalHeight,
+                    name: 'team-marker',
+                    customType: 'team-head-marker',
+                    markerIndex: markerIndex
+                });
+                teamNode.add(konvaImage);
+                objectLayer.batchDraw();
+            };
+            img.src = imagePath;
+        }
+
+        // 4. Restore objects
+        objects.forEach(item => {
+            if (Array.isArray(item)) {
+                // Minimized schema
+                const typeID = item[0];
+                const x = item[1];
+                const y = item[2];
+
+                if (typeID === 0) {
+                    const teamNode = createTeamNode(item[4], item[3], x, y);
+                    if (item[5] !== null && item[5] !== undefined) {
+                        attachMarkerToTeamNode(teamNode, item[5]);
+                    }
+                }
+                else if (typeID === 1) {
+                    createAnnotation(item[3], x, y);
+                }
+                else if (typeID === 2) {
+                    createObjectSprite(item[3], x, y, item[4] || '0');
+                }
+                else if (typeID === 3) {
+                    createMarkerSprite(item[3], x, y);
+                }
+                else if (typeID === 4) {
+                    let shape;
+                    const commonSettings = {
+                        x: x, y: y,
+                        shapeType: item[3],
+                        draggable: true, customType: 'terrain-shape', name: 'terrain',
+                        scaleX: item[6] || 1,
+                        scaleY: item[7] || 1,
+                        rotation: item[8] || 0,
+                        fill: item[9],
+                        stroke: item[10],
+                        strokeWidth: item[11]
+                    };
+                    if (item[3] === 'rect') {
+                        shape = new Konva.Rect({
+                            ...commonSettings,
+                            width: item[4] || 50,
+                            height: item[5] || 50
+                        });
+                    } else if (item[3] === 'triangle') {
+                        shape = new Konva.Line({ ...commonSettings, points: [25, 0, 50, 43, 0, 43], closed: true });
+                    } else if (item[3] === 'polygon') {
+                        shape = new Konva.Line({ ...commonSettings, points: [25, 0, 50, 18, 40, 45, 10, 45, 0, 18], closed: true });
+                    }
+                    
+                    objectLayer.add(shape);
+                    bindObjectEvents(shape);
+                }
+            } else {
+                // Fallback for Verbose JSON object schema
+                if (item.type === 'team-node') {
+                    const teamNode = createTeamNode(item.teamColor, item.team, item.x, item.y);
+                    if (item.headMarker !== null && item.headMarker !== undefined) {
+                        attachMarkerToTeamNode(teamNode, item.headMarker);
+                    }
+                }
+                else if (item.type === 'annotation') {
+                    createAnnotation(item.text, item.x, item.y);
+                }
+                else if (item.type === 'object-sprite') {
+                    createObjectSprite(item.objectType, item.x, item.y, item.capturedTeam || '0');
+                }
+                else if (item.type === 'marker-sprite') {
+                    createMarkerSprite(item.markerType, item.x, item.y);
+                }
+                else if (item.type === 'terrain-shape') {
+                    let shape;
+                    const commonSettings = {
+                        x: item.x, y: item.y,
+                        fill: item.fill, stroke: item.stroke, strokeWidth: item.strokeWidth,
+                        draggable: true, customType: 'terrain-shape', name: 'terrain',
+                        shapeType: item.shapeType,
+                        scaleX: item.scaleX || 1,
+                        scaleY: item.scaleY || 1,
+                        rotation: item.rotation || 0
+                    };
+                    if (item.shapeType === 'rect') {
+                        shape = new Konva.Rect({
+                            ...commonSettings,
+                            width: item.width || 50,
+                            height: item.height || 50
+                        });
+                    } else if (item.shapeType === 'triangle') {
+                        shape = new Konva.Line({ ...commonSettings, points: [25, 0, 50, 43, 0, 43], closed: true });
+                    } else if (item.shapeType === 'polygon') {
+                        shape = new Konva.Line({ ...commonSettings, points: [25, 0, 50, 18, 40, 45, 10, 45, 0, 18], closed: true });
+                    }
+                    
+                    objectLayer.add(shape);
+                    bindObjectEvents(shape);
+                }
+            }
+        });
+
+        // 5. Restore lines
+        lines.forEach(item => {
+            let points, stroke, strokeWidth, customType, dash, isArrow;
+            if (Array.isArray(item)) {
+                // Minimized schema: [points, stroke, strokeWidth, customType, dash, isArrow]
+                points = item[0];
+                stroke = item[1];
+                strokeWidth = item[2];
+                customType = item[3];
+                dash = item[4];
+                isArrow = item[5];
+            } else {
+                // Fallback for Verbose JSON object schema
+                points = item.points;
+                stroke = item.stroke;
+                strokeWidth = item.strokeWidth;
+                customType = item.customType;
+                dash = item.dash;
+                isArrow = item.isArrow ? 1 : 0;
+            }
+
+            const commonSettings = {
+                stroke: stroke,
+                strokeWidth: strokeWidth,
+                lineCap: 'round',
+                lineJoin: 'round',
+                customType: customType,
+                draggable: false,
+                name: 'drawn-line',
+                points: points
+            };
+            let shape;
+            if (isArrow) {
+                shape = new Konva.Arrow({
+                    ...commonSettings,
+                    pointerLength: 12,
+                    pointerWidth: 12,
+                    fill: stroke,
+                    dash: dash || null
+                });
+            } else {
+                shape = new Konva.Line({
+                    ...commonSettings,
+                    globalCompositeOperation: 'source-over'
+                });
+            }
+            drawLayer.add(shape);
+        });
+
+        // Redraw layers
+        objectLayer.batchDraw();
+        drawLayer.batchDraw();
+        stage.batchDraw();
+
+        alert("戰術代碼已成功載入！");
+    } catch (e) {
+        console.error(e);
+        alert("還原戰術板狀態失敗，可能是不相容的舊版本代碼！");
+    }
+}
+
+// Bind Section 6 buttons
+document.getElementById('btn-export-json').addEventListener('click', exportTacticsJSON);
+document.getElementById('btn-import-json').addEventListener('click', importTacticsJSON);
