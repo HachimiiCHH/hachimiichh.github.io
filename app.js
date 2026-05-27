@@ -24,6 +24,8 @@ let selectedNode = null;
 let mapImageObj = new Image();
 let konvaMapImage = null;
 let spawnMode = null; // 'team-a' | 'team-b' | 'team-c' or null
+let objectSpawnMode = null; // 'object-0' | 'object-1' | 'object-2' or null
+let objectImageCache = {}; // cache for loaded object images
 
 function loadMap(url) {
     mapImageObj.crossOrigin = 'Anonymous';
@@ -238,6 +240,42 @@ function createTerrainShape(shapeType) {
     switchToMoveMode();
 }
 
+function createObjectSprite(objectIndex, x, y) {
+    let imagePath = '';
+    let size = 60;
+    if (objectIndex < 3) {
+        imagePath = `object/ice-big-${objectIndex}.png`;
+        size = 60;
+    } else {
+        imagePath = `object/ice-small-${objectIndex - 3}.png`;
+        size = 40;
+    }
+    
+    // Load image with Promise
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = function() {
+        const konvaImage = new Konva.Image({
+            image: img,
+            x: x,
+            y: y,
+            width: size,
+            height: size,
+            draggable: true,
+            customType: 'object-sprite',
+            objectType: objectIndex
+        });
+        
+        objectLayer.add(konvaImage);
+        bindObjectEvents(konvaImage);
+        objectLayer.batchDraw();
+    };
+    img.onerror = function() {
+        console.error("Failed to load object image: " + imagePath);
+    };
+    img.src = imagePath;
+}
+
 contextMenu.addEventListener('click', function(e) {
     const item = e.target;
     if (!item.classList.contains('context-menu-item') || !rightClickedObject) return;
@@ -342,7 +380,7 @@ stage.on('mouseup touchend', function () {
                 }
             });
             tween.play();
-        }, 5000); 
+        }, 3000); 
     }
     else if (tempShape) {
         tempShape.draggable(true); 
@@ -364,9 +402,14 @@ function switchToMoveMode() {
     stage.draggable(false); 
     // cancel any spawn mode when switching tools
     spawnMode = null;
+    objectSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
+    for (let i = 0; i <= 5; i++) {
+        const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
     drawLayer.find('.drawn-line').forEach(line => line.listening(true));
     updateButtonUI('btn-move');
     stage.container().style.cursor = 'default';
@@ -381,9 +424,14 @@ function enableDrawMode(modeStr, btnId, cursor = 'precise') {
     updateButtonUI(btnId);
     // cancel spawn mode when selecting a drawing/tool mode
     spawnMode = null;
+    objectSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
+    for (let i = 0; i <= 5; i++) {
+        const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
     stage.container().style.cursor = cursor;
     objectLayer.batchDraw();
     stage.batchDraw();
@@ -392,9 +440,14 @@ function enableDrawMode(modeStr, btnId, cursor = 'precise') {
 function handleColorButtonClick(color, tag, text) {
     // cancel spawn mode when changing color/tool
     spawnMode = null;
+    objectSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
+    for (let i = 0; i <= 5; i++) {
+        const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
     activeTacticalColor = color;
     currentLineTag = tag;
     colorStatus.innerText = text;
@@ -456,6 +509,33 @@ document.getElementById('add-team-b').addEventListener('click', () => setSpawnMo
 document.getElementById('add-team-c').addEventListener('click', () => setSpawnMode('team-c'));
 document.getElementById('btn-insert-text').addEventListener('click', () => enableDrawMode('text', 'btn-insert-text', 'text'));
 
+// Object spawn mode handling
+function setObjectSpawnMode(mode) {
+    const targetMode = (objectSpawnMode === mode) ? null : mode;
+    objectSpawnMode = targetMode;
+    if (objectSpawnMode) {
+        currentMode = 'move';
+        stage.draggable(false);
+        drawLayer.find('.drawn-line').forEach(line => line.listening(true));
+        updateButtonUI(null);
+        spawnMode = null; // cancel team spawn mode when selecting object mode
+    }
+    // visual feedback for object buttons
+    for (let i = 0; i <= 5; i++) {
+        const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.toggle('active', objectSpawnMode === `object-${i}`);
+    }
+    // change cursor
+    stage.container().style.cursor = objectSpawnMode ? 'crosshair' : 'default';
+}
+
+for (let i = 0; i <= 5; i++) {
+    const btn = document.getElementById(`gen-object-${i}`);
+    if (btn) {
+        btn.addEventListener('click', () => setObjectSpawnMode(`object-${i}`));
+    }
+}
+
 document.getElementById('clear-team-a').addEventListener('click', () => clearTeamsByName('A'));
 document.getElementById('clear-team-b').addEventListener('click', () => clearTeamsByName('B'));
 document.getElementById('clear-team-c').addEventListener('click', () => clearTeamsByName('C'));
@@ -514,6 +594,13 @@ stage.on('click tap', function (e) {
         if (spawnMode === 'team-a') createTeamNode('#ff4d4d', 'A', pos.x, pos.y);
         else if (spawnMode === 'team-b') createTeamNode('#3399ff', 'B', pos.x, pos.y);
         else if (spawnMode === 'team-c') createTeamNode('#ffcc00', 'C', pos.x, pos.y);
+        return;
+    }
+    // object spawn mode: allow placing objects on click
+    if (objectSpawnMode && (e.target === stage || e.target === konvaMapImage)) {
+        const objIndex = parseInt(objectSpawnMode.replace('object-', ''), 10);
+        const offset = objIndex < 3 ? 30 : 20; // 30px offset for 60px size, 20px offset for 40px size
+        createObjectSprite(objIndex, pos.x - offset, pos.y - offset); // center the image at click point
         return;
     }
     if (currentMode !== 'move') return;
