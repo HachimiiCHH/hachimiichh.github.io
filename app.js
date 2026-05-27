@@ -288,13 +288,13 @@ function createObjectSprite(objectIndex, x, y) {
         size = 40;
     } else if (objectIndex === 6) {
         imagePath = 'object/score-B-0.png';
-        size = 40;
+        size = 50; // 40 * 1.25 = 50
     } else if (objectIndex === 7) {
         imagePath = 'object/score-A-0.png';
-        size = 50;
+        size = 62; // 50 * 1.25 = 62.5 -> round to 62
     } else if (objectIndex === 8) {
         imagePath = 'object/score-S-0.png';
-        size = 60;
+        size = 75; // 60 * 1.25 = 75
     }
     
     // Load image with Promise
@@ -714,9 +714,9 @@ stage.on('click tap', function (e) {
         let size = 60;
         if (objIndex < 3) size = 60;
         else if (objIndex < 6) size = 40;
-        else if (objIndex === 6) size = 40;
-        else if (objIndex === 7) size = 50;
-        else if (objIndex === 8) size = 60;
+        else if (objIndex === 6) size = 50; // 40 * 1.25
+        else if (objIndex === 7) size = 62; // 50 * 1.25
+        else if (objIndex === 8) size = 75; // 60 * 1.25
         
         const offset = size / 2;
         createObjectSprite(objIndex, pos.x - offset, pos.y - offset); // center the image at click point
@@ -742,3 +742,12 @@ stage.on('contentContextmenu', function (e) {
 document.getElementById('add-shape-triangle').addEventListener('click', () => createTerrainShape('triangle'));
 document.getElementById('add-shape-rect').addEventListener('click', () => createTerrainShape('rect'));
 document.getElementById('add-shape-polygon').addEventListener('click', () => createTerrainShape('polygon'));
+
+document.getElementById('clear-all-objects').addEventListener('click', () => {
+    objectLayer.find(node => node.attrs && node.attrs.customType === 'object-sprite').forEach(n => n.destroy());
+    if (selectedNode && selectedNode.attrs && selectedNode.attrs.customType === 'object-sprite') {
+        transformer.nodes([]);
+        selectedNode = null;
+    }
+    objectLayer.batchDraw();
+});
