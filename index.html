@@ -147,13 +147,69 @@
 
         <hr>
 
-        <!-- 4. 情報標記 (placeholder) -->
+        <!-- 4. 情報標記 -->
         <h4 style="margin:5px 0;">4. 情報標記</h4>
-        <div id="info-marker-panel" style="display:flex; gap:4px; flex-wrap:wrap;">
-            <button id="gen-info-a" class="tool-btn" style="background:#666; color:white; flex:1;">生成情報 A</button>
-            <button id="gen-info-b" class="tool-btn" style="background:#666; color:white; flex:1;">生成情報 B</button>
+        <div style="font-size: 11px; color: #ff9900; margin-bottom: 2px;">戰意標記 (1 ~ 5)：</div>
+        <div id="marker-power-panel" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom: 6px;">
+            <button id="gen-marker-0" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/power_1.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-1" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/power_2.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-2" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/power_3.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-3" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/power_4.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-4" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/power_5.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
         </div>
-        <p style="margin:6px 0; font-size:12px; color:#aaa;">說明：本區為未來情報標記按鈕預留位置。</p>
+        <div style="font-size: 11px; color: #ff9900; margin-bottom: 2px;">戰術標記 (0 ~ 6)：</div>
+        <div id="marker-picon-panel" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom: 6px;">
+            <button id="gen-marker-5" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_0.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-6" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_1.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-7" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_2.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-8" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_3.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-9" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_4.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-10" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_5.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-11" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/p_icon_6.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+        </div>
+        <div style="font-size: 11px; color: #ff9900; margin-bottom: 2px;">目標標記 (1 ~ 4)：</div>
+        <div id="marker-target-panel" style="display:flex; gap:4px; flex-wrap:wrap; margin-bottom: 6px;">
+            <button id="gen-marker-12" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/mark_1.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-13" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/mark_2.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-14" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/mark_3.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+            <button id="gen-marker-15" class="tool-btn" style="background:#555; color:white; flex:1; padding:4px; border:none; border-radius:4px; cursor:pointer; overflow:hidden;">
+                <img src="marker/mark_4.png" style="width:100%; height:auto; max-width:40px; object-fit:contain;">
+            </button>
+        </div>
+        <button id="clear-all-markers" style="background:#552222; color:#ff9999; border: 1px solid #773333; border-radius: 4px; padding: 5px 10px; width: 100%; font-size: 11px; margin-top: 2px; cursor: pointer;">
+            🗑️ 清除地圖所有情報標記
+        </button>
+        <p style="margin:6px 0; font-size:12px; color:#aaa;">說明：點選標記按鈕後進入生成模式，點擊地圖生成可選取、移動與刪除的標記。</p>
 
         <hr>
 

@@ -25,6 +25,7 @@ let mapImageObj = new Image();
 let konvaMapImage = null;
 let spawnMode = null; // 'team-a' | 'team-b' | 'team-c' or null
 let objectSpawnMode = null; // 'object-0' | 'object-1' | 'object-2' or null
+let markerSpawnMode = null; // 'marker-0' | 'marker-1' | ... or null
 let objectImageCache = {}; // cache for loaded object images
 
 function loadMap(url) {
@@ -98,7 +99,7 @@ function handleSelectObject(node) {
         transformer.rotateEnabled(true);
         transformer.enabledAnchors(['top-left', 'top-right', 'bottom-left', 'bottom-right']);
         transformer.nodes([node]);
-    } else if (node.attrs.customType === 'team-node' || node.attrs.customType === 'annotation' || node.attrs.customType === 'object-sprite') {
+    } else if (node.attrs.customType === 'team-node' || node.attrs.customType === 'annotation' || node.attrs.customType === 'object-sprite' || node.attrs.customType === 'marker-sprite') {
         transformer.rotateEnabled(false);
         transformer.enabledAnchors([]); // No resize/rotate anchors, just a premium bounding box!
         transformer.nodes([node]);
@@ -121,7 +122,7 @@ function handleRightClickObject(e, node) {
 function bindObjectEvents(node) {
     node.on('mousedown touchstart click tap', (e) => {
         // Redirection to move mode if clicked while in a spawn mode!
-        if (objectSpawnMode || spawnMode) {
+        if (objectSpawnMode || spawnMode || markerSpawnMode) {
             switchToMoveMode();
         }
         
@@ -373,8 +374,8 @@ let tempShape = null;
 let pointsLine = [];
 
 stage.on('mousedown touchstart', function (e) {
-    // Redirection if clicking on an existing object while in object spawn mode or team spawn mode!
-    if ((objectSpawnMode || spawnMode) && e.target !== stage && e.target !== konvaMapImage) {
+    // Redirection if clicking on an existing object while in object spawn mode, team spawn mode, or marker spawn mode!
+    if ((objectSpawnMode || spawnMode || markerSpawnMode) && e.target !== stage && e.target !== konvaMapImage) {
         // Switch to move mode immediately
         switchToMoveMode();
         
@@ -513,11 +514,16 @@ function switchToMoveMode() {
     // cancel any spawn mode when switching tools
     spawnMode = null;
     objectSpawnMode = null;
+    markerSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
     for (let i = 0; i <= 8; i++) {
         const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
+    for (let i = 0; i <= 15; i++) {
+        const btn = document.getElementById(`gen-marker-${i}`);
         if (btn) btn.classList.remove('active');
     }
     updateButtonUI('btn-move');
@@ -534,11 +540,16 @@ function enableDrawMode(modeStr, btnId, cursor = 'precise') {
     // cancel spawn mode when selecting a drawing/tool mode
     spawnMode = null;
     objectSpawnMode = null;
+    markerSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
     for (let i = 0; i <= 8; i++) {
         const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
+    for (let i = 0; i <= 15; i++) {
+        const btn = document.getElementById(`gen-marker-${i}`);
         if (btn) btn.classList.remove('active');
     }
     stage.container().style.cursor = cursor;
@@ -551,11 +562,16 @@ function handleColorButtonClick(color, tag, text) {
     // cancel spawn mode when changing color/tool
     spawnMode = null;
     objectSpawnMode = null;
+    markerSpawnMode = null;
     document.getElementById('add-team-a').classList.remove('active');
     document.getElementById('add-team-b').classList.remove('active');
     document.getElementById('add-team-c').classList.remove('active');
     for (let i = 0; i <= 8; i++) {
         const btn = document.getElementById(`gen-object-${i}`);
+        if (btn) btn.classList.remove('active');
+    }
+    for (let i = 0; i <= 15; i++) {
+        const btn = document.getElementById(`gen-marker-${i}`);
         if (btn) btn.classList.remove('active');
     }
     activeTacticalColor = color;
@@ -605,6 +621,16 @@ function setSpawnMode(mode) {
         stage.draggable(false);
         drawLayer.find('.drawn-line').forEach(line => line.listening(true));
         updateButtonUI(null);
+        objectSpawnMode = null;
+        markerSpawnMode = null;
+        for (let i = 0; i <= 8; i++) {
+            const btn = document.getElementById(`gen-object-${i}`);
+            if (btn) btn.classList.remove('active');
+        }
+        for (let i = 0; i <= 15; i++) {
+            const btn = document.getElementById(`gen-marker-${i}`);
+            if (btn) btn.classList.remove('active');
+        }
     }
     // visual feedback for add-team buttons
     document.getElementById('add-team-a').classList.toggle('active', spawnMode === 'team-a');
@@ -630,6 +656,11 @@ function setObjectSpawnMode(mode) {
         drawLayer.find('.drawn-line').forEach(line => line.listening(true));
         updateButtonUI(null);
         spawnMode = null; // cancel team spawn mode when selecting object mode
+        markerSpawnMode = null;
+        for (let i = 0; i <= 15; i++) {
+            const btn = document.getElementById(`gen-marker-${i}`);
+            if (btn) btn.classList.remove('active');
+        }
     }
     // visual feedback for object buttons
     for (let i = 0; i <= 8; i++) {
@@ -722,6 +753,12 @@ stage.on('click tap', function (e) {
         createObjectSprite(objIndex, pos.x - offset, pos.y - offset); // center the image at click point
         return;
     }
+    // marker spawn mode: allow placing markers on click
+    if (markerSpawnMode && (e.target === stage || e.target === konvaMapImage)) {
+        const markerIndex = parseInt(markerSpawnMode.replace('marker-', ''), 10);
+        createMarkerSprite(markerIndex, pos.x, pos.y); // Pass raw coordinates for perfect internal centering
+        return;
+    }
     if (currentMode !== 'move') return;
     if (e.target === stage || e.target === konvaMapImage) {
         transformer.nodes([]);
@@ -746,6 +783,106 @@ document.getElementById('add-shape-polygon').addEventListener('click', () => cre
 document.getElementById('clear-all-objects').addEventListener('click', () => {
     objectLayer.find(node => node.attrs && node.attrs.customType === 'object-sprite').forEach(n => n.destroy());
     if (selectedNode && selectedNode.attrs && selectedNode.attrs.customType === 'object-sprite') {
+        transformer.nodes([]);
+        selectedNode = null;
+    }
+    objectLayer.batchDraw();
+});
+
+// ==========================================
+// 9. 情報標記生產器與事件綁定
+// ==========================================
+
+function createMarkerSprite(markerIndex, clickX, clickY) {
+    let imagePath = '';
+    let size = 32; // Target bounding box size
+    
+    if (markerIndex < 5) {
+        imagePath = `marker/power_${markerIndex + 1}.png`;
+    } else if (markerIndex >= 5 && markerIndex < 12) {
+        imagePath = `marker/p_icon_${markerIndex - 5}.png`;
+    } else {
+        imagePath = `marker/mark_${markerIndex - 11}.png`;
+    }
+    
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = function() {
+        let finalWidth = size;
+        let finalHeight = size;
+        const imgRatio = img.width / img.height;
+        
+        if (imgRatio > 1) {
+            // Landscape
+            finalWidth = size;
+            finalHeight = size / imgRatio;
+        } else {
+            // Portrait or Square
+            finalHeight = size;
+            finalWidth = size * imgRatio;
+        }
+        
+        // Center the image perfectly over the clicked position
+        const posX = clickX - finalWidth / 2;
+        const posY = clickY - finalHeight / 2;
+        
+        const konvaImage = new Konva.Image({
+            image: img,
+            x: posX,
+            y: posY,
+            width: finalWidth,
+            height: finalHeight,
+            draggable: true,
+            customType: 'marker-sprite',
+            markerType: markerIndex
+        });
+        
+        objectLayer.add(konvaImage);
+        bindObjectEvents(konvaImage);
+        updateDraggableState();
+        objectLayer.batchDraw();
+    };
+    img.onerror = function() {
+        console.error("Failed to load marker image: " + imagePath);
+    };
+    img.src = imagePath;
+}
+
+function setMarkerSpawnMode(mode) {
+    const targetMode = (markerSpawnMode === mode) ? null : mode;
+    markerSpawnMode = targetMode;
+    if (markerSpawnMode) {
+        currentMode = 'move';
+        stage.draggable(false);
+        drawLayer.find('.drawn-line').forEach(line => line.listening(true));
+        updateButtonUI(null);
+        spawnMode = null;
+        objectSpawnMode = null;
+        for (let i = 0; i <= 8; i++) {
+            const btn = document.getElementById(`gen-object-${i}`);
+            if (btn) btn.classList.remove('active');
+        }
+    }
+    // visual feedback for marker buttons
+    for (let i = 0; i <= 15; i++) {
+        const btn = document.getElementById(`gen-marker-${i}`);
+        if (btn) btn.classList.toggle('active', markerSpawnMode === `marker-${i}`);
+    }
+    // change cursor
+    stage.container().style.cursor = markerSpawnMode ? 'crosshair' : 'default';
+    updateDraggableState();
+}
+
+for (let i = 0; i <= 15; i++) {
+    const btn = document.getElementById(`gen-marker-${i}`);
+    if (btn) {
+        btn.addEventListener('click', () => setMarkerSpawnMode(`marker-${i}`));
+    }
+}
+
+document.getElementById('clear-all-markers').addEventListener('click', () => {
+    objectLayer.find(node => node.attrs && node.attrs.customType === 'marker-sprite').forEach(n => n.destroy());
+    if (selectedNode && selectedNode.attrs && selectedNode.attrs.customType === 'marker-sprite') {
         transformer.nodes([]);
         selectedNode = null;
     }
